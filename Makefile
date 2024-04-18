@@ -2,21 +2,27 @@ CC = gcc
 CFLAGS = -Wall -g
 LDFLAGS = -lrt -pthread
 
-EXECUTABLES = 	game barbarian wizard rogue
+# Executables to be built
+EXECUTABLES = game barbarian wizard rogue
 
+# Default target
 all: $(EXECUTABLES)
 
-game: game.c dungeon_info.h dungeon_settings.h
-	$(CC) $(CFLAGS) game.c -o game $(LDFLAGS)
+# Specific rules for each executable
+game: game.c dungeon.o
+	$(CC) $(CFLAGS) -o game game.c dungeon.o $(LDFLAGS)
 
-barbarian: barbarian.c dungeon_info.h dungeon_settings.h
-	$(CC) $(CFLAGS) barbarian.c -o barbarian $(LDFLAGS)
+barbarian: barbarian.c
+	$(CC) $(CFLAGS) -o barbarian barbarian.c $(LDFLAGS)
 
-wizard: wizard.c dungeon_info.h dungeon_settings.h
-	$(CC) $(CFLAGS) wizard.c -o wizard $(LDFLAGS)
+wizard: wizard.c
+	$(CC) $(CFLAGS) -o wizard wizard.c $(LDFLAGS)
 
-rogue: rogue.c dungeon_info.h dungeon_settings.h
-	$(CC) $(CFLAGS) rogue.c -o rogue $(LDFLAGS)
+rogue: rogue.c
+	$(CC) $(CFLAGS) -o rogue rogue.c $(LDFLAGS)
 
 clean:
-	rm -f $(EXECUTABLES)
+	rm -f $(EXECUTABLES) *.o
+
+.PHONY: all clean
+
