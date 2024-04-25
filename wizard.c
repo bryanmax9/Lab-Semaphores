@@ -23,7 +23,7 @@ void setup_signal_handling() {
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = signal_handler;
     if (sigaction(DUNGEON_SIGNAL, &sa, NULL) < 0) {
-        perror("sigaction");
+        perror("sigaction failed");
         exit(EXIT_FAILURE);
     }
 }
@@ -32,13 +32,13 @@ void setup_signal_handling() {
 int main() {
     int shm_fd = shm_open(dungeon_shm_name, O_RDWR, 0660);
     if (shm_fd < 0) {
-        perror("shm_open");
+        perror("shm_open failed");
         exit(EXIT_FAILURE);
     }
 
     dungeon = mmap(NULL, sizeof(struct Dungeon), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (dungeon == MAP_FAILED) {
-        perror("mmap");
+        perror("mmap failed");
         close(shm_fd);
         exit(EXIT_FAILURE);
     }
@@ -46,10 +46,16 @@ int main() {
     setup_signal_handling();
 
     while (dungeon->running) {
+        printf("Waiting for signals...\n"); // Print waiting message
         pause(); // Wait for signals
     }
 
-    munmap(dungeon, sizeof(struct Dungeon));
+    printf("Game ended. Cleaning up...\n"); // Print cleanup message
+
+    if (munmap(dungeon, sizeof(struct Dungeon)) == -1) {
+        perror("munmap failed");
+        exit(EXIT_FAILURE);
+    }
     close(shm_fd);
 
     return EXIT_SUCCESS;
@@ -58,6 +64,7 @@ int main() {
 // Signal handler function to decode the spell
 void signal_handler(int sig) {
     if (sig == DUNGEON_SIGNAL) {
+        printf("Received DUNGEON_SIGNAL.\n"); // Print signal received message
         int shiftValue = dungeon->barrier.spell[0] - 'A';
         int i;
         for (i = 0; dungeon->barrier.spell[i] != '\0' && i < SPELL_BUFFER_SIZE; i++) {
@@ -66,7 +73,9 @@ void signal_handler(int sig) {
         dungeon->wizard.spell[i] = '\0'; // Ensure null-termination
 
         // Simulate decoding time
+        printf("Decoding the spell...\n"); // Print decoding message
         sleep(SECONDS_TO_GUESS_BARRIER);
+        printf("Spell decoded.\n"); // Print decoding complete message
     }
 }
 

@@ -1,6 +1,14 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-24ddc0f5d75046c5622901739e7c5dd533143b0c8e959d652212380cedb1ea36.svg)](https://classroom.github.com/a/dd7oD11k)
 # CECS 326 Lab 2: Concurrent Processing, Shared Memory, and Semaphores
 
+## Compile the game
+
+* Use the following command to start the program/game:
+
+```bash
+./game
+```
+
 ## Assignment Description
 
 The goal of this assignment is to become familiar with concurrent processing in Unix/Linux using [shared memory](https://man7.org/linux/man-pages/man7/shm_overview.7.html) and become familiar with both man pages and signal processing.

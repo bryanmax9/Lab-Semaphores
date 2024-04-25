@@ -31,6 +31,7 @@ void signal_handler(int sig) {
                 high = mid;
             } else {
                 // Correct guess, trap unlocked
+                printf("Trap unlocked.\n"); // Print trap unlocked message
                 break;
             }
         }
@@ -39,9 +40,13 @@ void signal_handler(int sig) {
         sem_wait(lever_one);
         sem_wait(lever_two);
 
+        printf("Rogue entering treasure room...\n"); // Print entering treasure room message
+
         // Simulate rogue getting the treasure. This part is simplified;
         // Implement according to your game logic, e.g., copying treasure to spoils.
         sleep(TIME_TREASURE_AVAILABLE);
+
+        printf("Rogue got the treasure.\n"); // Print got treasure message
 
         sem_post(lever_one);
         sem_post(lever_two);
@@ -69,6 +74,8 @@ int main() {
         perror("sem_open failed");
         exit(EXIT_FAILURE);
     }
+
+    printf("Rogue ready. Waiting for signals...\n"); // Print ready message
 
     struct sigaction sa = {0};
     sa.sa_handler = &signal_handler;

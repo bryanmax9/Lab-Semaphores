@@ -1,4 +1,3 @@
-// barbarian.c
 #include "dungeon_info.h"
 #include "dungeon_settings.h"
 #include <stdio.h>
@@ -24,12 +23,12 @@ void handle_signal(int sig) {
 void setup_shared_memory() {
     int shm_fd = shm_open(dungeon_shm_name, O_RDWR, 0660);
     if (shm_fd == -1) {
-        perror("shm_open");
+        perror("shm_open failed");
         exit(EXIT_FAILURE);
     }
     dungeon = mmap(NULL, sizeof(struct Dungeon), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (dungeon == MAP_FAILED) {
-        perror("mmap");
+        perror("mmap failed");
         close(shm_fd);
         exit(EXIT_FAILURE);
     }
@@ -41,7 +40,10 @@ int main() {
     // Setup signal handling
     struct sigaction sa = {0};
     sa.sa_handler = &handle_signal;
-    sigaction(DUNGEON_SIGNAL, &sa, NULL);
+    if (sigaction(DUNGEON_SIGNAL, &sa, NULL) == -1) {
+        perror("sigaction failed");
+        exit(EXIT_FAILURE);
+    }
 
     // Wait for signal
     while (dungeon->running) {
@@ -49,6 +51,10 @@ int main() {
     }
 
     // Cleanup before exiting
-    munmap(dungeon, sizeof(struct Dungeon)); // Unmap shared memory
+    if (munmap(dungeon, sizeof(struct Dungeon)) == -1) {
+        perror("munmap failed");
+        exit(EXIT_FAILURE);
+    }
+    
     return 0;
 }
