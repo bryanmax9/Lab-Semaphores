@@ -79,17 +79,46 @@ Please read at a *MINIMUM* the following pages. You don't need to be meticulous 
 ### questions you should answer: 
 * Q1. In what order should you perform the actions to create [shared memory](https://man7.org/linux/man-pages/man7/shm_overview.7.html)? (HINT: A minimum of three functions must be used the first time you create shared memory.)
 
+- To create shared memory in Linux using the POSIX standard, you typically perform these actions in the following order:
+
+1. shm_open(): Open a new or existing shared memory object.
+2. ftruncate(): Resize the shared memory object to the required size. This step is necessary only if you are creating a new shared memory object or resizing an existing one.
+3. mmap(): Map the shared memory object into the virtual address space of the calling process to allow reading and writing to the shared memory.
+
+
 * Q2. What is the return type of mmap, and what can you do with it? (If you are unfamiliar with C/C++, you might need to [do some personal research](https://en.cppreference.com/w/c) in order to understand this data type.)
+
+- The return type of mmap() is a pointer of type void*. This pointer can be cast to any desired type, depending on the data you intend to store in the mapped shared memory. This pointer gives your program direct access to the memory area as if it were a regular array or a variable in your program. You use this pointer to read from and write to the shared memory.
 
 * Q3. What does [fork()](https://man7.org/linux/man-pages/man2/fork.2.html) return, and how can that information be used?
 
+- fork() returns:
+
+1. A positive process ID (PID) of the child process to the parent process.
+2. 0 to the newly created child process.
+3. -1 on failure to create a child process, with an error code stored in errno.
+
+The return value is used to determine the control flow in your program: whether the code is executing in the parent or the child process. The parent can use the child's PID for tasks like managing or monitoring the child process (e.g., using wait() to wait for the child process to terminate).
+
 * Q4. If [exec](https://man7.org/linux/man-pages/man3/exec.3.html) works as intended, what happens to the process that calls it?
+
+- If an exec function (like execl, execv, etc.) works as intended, it replaces the current process image with a new program image. This means the entire current process, including its code and data, is replaced by the new program, which starts executing from its main. If exec is successful, the original process ceases to exist, and there is no return to the original program.
 
 * Q5. Do all three functions for shared memory need to be called in every single process after the first? If yes, why? If no, which ones are needed, and why would you not need to call all of them?
 
+- No, not all three functions need to be called in every single process:
+
+1. shm_open() needs to be called in each process to obtain a file descriptor for the shared memory object.
+2. ftruncate() is typically called only once to set the size of the shared memory object when it is first created.
+3. mmap() must be called in each process that wants to access the shared memory, as it maps the shared memory into the process's local address space.
+
 * Q6. What does a [struct](https://en.cppreference.com/w/c/language/struct) look like in memory, and if I store a struct in shared memory, how do I access its various fields?
 
+- A struct in memory is laid out sequentially with its fields stored in the order declared, possibly with some padding added between fields or at the end to align fields according to their data types. If you store a struct in shared memory, you access its fields using the pointer returned by mmap(). You cast this pointer to the type of the struct, and then you can use it just like a normal struct pointer, accessing its fields using the dot (.) or arrow (->) operators.
+
 * Q7. How do I determine the size of a struct in bytes?
+
+- In C, you can determine the size of a struct using the sizeof operator. For example, if you have a struct named struct MyStruct, you can find its size by using sizeof(struct MyStruct). This gives you the total number of bytes required to store an instance of that struct, including any padding added by the compiler for alignment purposes.
 
 ## Caesar Cypher
 If you want to know a brief history of the Caesar Cypher, feel free to read the [Wikipedia page](https://en.wikipedia.org/wiki/Caesar_cipher) for a summary. The wikipedia page also offers some formulas and examples that might help reinforce your understanding.
