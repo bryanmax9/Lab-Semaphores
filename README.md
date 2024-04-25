@@ -80,11 +80,11 @@ Please read at a *MINIMUM* the following pages. You don't need to be meticulous 
 * Q1. In what order should you perform the actions to create [shared memory](https://man7.org/linux/man-pages/man7/shm_overview.7.html)? (HINT: A minimum of three functions must be used the first time you create shared memory.)
 
 - To create shared memory in Linux using the POSIX standard, you typically perform these actions in the following order:
-
-1. shm_open(): Open a new or existing shared memory object.
-2. ftruncate(): Resize the shared memory object to the required size. This step is necessary only if you are creating a new shared memory object or resizing an existing one.
-3. mmap(): Map the shared memory object into the virtual address space of the calling process to allow reading and writing to the shared memory.
-
+```bash
+    shm_open(): Open a new or existing shared memory object.
+    ftruncate(): Resize the shared memory object to the required size. This step is necessary only if you are creating a new shared memory object or resizing an existing one.
+    mmap(): Map the shared memory object into the virtual address space of the calling process to allow reading and writing to the shared memory.
+```
 
 * Q2. What is the return type of mmap, and what can you do with it? (If you are unfamiliar with C/C++, you might need to [do some personal research](https://en.cppreference.com/w/c) in order to understand this data type.)
 
@@ -94,10 +94,11 @@ Please read at a *MINIMUM* the following pages. You don't need to be meticulous 
 
 - fork() returns:
 
-1. A positive process ID (PID) of the child process to the parent process.
-2. 0 to the newly created child process.
-3. -1 on failure to create a child process, with an error code stored in errno.
-
+```bash
+    A positive process ID (PID) of the child process to the parent process.
+    0 to the newly created child process.
+    -1 on failure to create a child process, with an error code stored in errno.
+```
 The return value is used to determine the control flow in your program: whether the code is executing in the parent or the child process. The parent can use the child's PID for tasks like managing or monitoring the child process (e.g., using wait() to wait for the child process to terminate).
 
 * Q4. If [exec](https://man7.org/linux/man-pages/man3/exec.3.html) works as intended, what happens to the process that calls it?
@@ -108,9 +109,11 @@ The return value is used to determine the control flow in your program: whether 
 
 - No, not all three functions need to be called in every single process:
 
-1. shm_open() needs to be called in each process to obtain a file descriptor for the shared memory object.
-2. ftruncate() is typically called only once to set the size of the shared memory object when it is first created.
-3. mmap() must be called in each process that wants to access the shared memory, as it maps the shared memory into the process's local address space.
+```bash
+    shm_open() needs to be called in each process to obtain a file descriptor for the shared memory object.
+    ftruncate() is typically called only once to set the size of the shared memory object when it is first created.
+    mmap() must be called in each process that wants to access the shared memory, as it maps the shared memory into the process's local address space.
+```
 
 * Q6. What does a [struct](https://en.cppreference.com/w/c/language/struct) look like in memory, and if I store a struct in shared memory, how do I access its various fields?
 
