@@ -1,166 +1,116 @@
-// rogue.c
-/* 
-ABOUT:
-When the Rogue receives a signal (defined in dungeon_settings.h), 
-the Rogue will attempt to guess a float value to "pick" a lock. 
-The Trap struct has a char for direction, 
-and a boolean for locked. This puzzle is a little unique. 
-The Dungeon will wait for a total amount of time defined in 
-dungeon_settings.h as SECONDS_TO_PICK, 
-but will check the value of the Rogue's current pick position 
-using TIME_BETWEEN_ROGUE_TICKS. Notice that these two values 
-are quite different, and that is because one of them uses sleep, 
-and the other usleep. I recommend that you follow a similar example.
-
-Every X microseconds, the Dungeon will check the field pick 
-in the Rogue struct in shared memory, 
-and will change the direction and locked fields in Trap accordingly. 
-If the Rogue's pick needs to go up, 
-the trap will set direction to u. 
-If the Rogue's pick needs to go down, t
-he trap will set the direction to d. 
-If the Rogue's pick is in the right position, 
-the dungeon will set direction to -, and locked to false, 
-indicating that the Rogue succeeded in picking the lock. 
-If this occurs, it is counted as success. 
-While this can be done through a brute force search, 
-it can be very elegantly accomplished with a binary search.
-*/
-#include "dungeon_info.h"
-#include "dungeon_settings.h"
+// Including necessary headers for functionalities such as I/O, system calls, shared memory, and semaphores
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h> 
-#include <sys/mman.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <string.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <time.h>
+#include <sys/mman.h>
 #include <semaphore.h>
-#include <stdbool.h>
+#include "dungeon_info.h"
+#include "dungeon_settings.h"
 
+// Global declaration of the shared dungeon structure for easy access throughout the program
 struct Dungeon *dungeon;
-sem_t* semaphore_one;
-sem_t* semaphore_two;
-sem_t *my_semaphore;
+sem_t *lever; // Semaphore handle
 
-void signal_setup();
-void signal_check();
-
-void signal_setup() {
-    struct sigaction sa = {0};
-    sa.sa_handler = &signal_check;
-    sigaction(SEMAPHORE_SIGNAL, &sa, NULL);
+// Function to handle collecting treasure when a semaphore signal is received
+void collect_treasure(int signal) {
+    if (signal == SEMAPHORE_SIGNAL) {
+        sem_wait(lever); // Wait to acquire the semaphore before accessing the treasure
+        for (int i = 0; i < 4; i++) {
+            while (dungeon->treasure[i] == '\0') { // Wait until the treasure is available
+                sleep(1);
+            }
+            dungeon->spoils[i] = dungeon->treasure[i]; // Collect the treasure
+        }
+        sem_post(lever); // Release the semaphore after collecting
+    }
 }
 
-void signal_check(int signal_val) {
+// Function to simulate lock picking by the rogue
+void rogue_pick_lock(int signal, struct Dungeon *dungeon) {
+    if (signal == DUNGEON_SIGNAL) {
+        sem_wait(lever); // Wait to acquire the semaphore before picking the lock
+        float low = 0.0, high = MAX_PICK_ANGLE, mid = 0;
+        while (low <= high) {
+            mid = (low + high) / 2; // Calculate mid point
+            dungeon->rogue.pick = mid; // Set the pick's position
+            dungeon->trap.direction = 't'; // Temporary direction to indicate checking
+            usleep(TIME_BETWEEN_ROGUE_TICKS); // Pause briefly between checks
 
-
-    if(signal_val == DUNGEON_SIGNAL) {
-
-        sem_wait(my_semaphore);
-
-        float min_pick = 0.0;
-        float max_pick = MAX_PICK_ANGLE;
-        float middle_pick = ( max_pick + min_pick ) / 2; 
-
-        unsigned int total_time = SECONDS_TO_PICK  * 1000000;
-        unsigned int elapsed_time = 0;
-
-
-        // binary search
-        while ((max_pick - min_pick > LOCK_THRESHOLD) && (elapsed_time < total_time)) {
-            middle_pick = ( max_pick + min_pick ) / 2;
-            dungeon->rogue.pick = middle_pick;
-            printf("Middle pick updated to: %f\n", middle_pick);
-
-            // current pick position
-            usleep(TIME_BETWEEN_ROGUE_TICKS);
-
-            // update time
-            elapsed_time += TIME_BETWEEN_ROGUE_TICKS;
-
-            // adjust search
+            // Adjust the range based on the direction feedback from the trap
             if (dungeon->trap.direction == 'u') {
-                // we need to go up
-                min_pick = middle_pick;
+                low = mid + LOCK_THRESHOLD;
             } else if (dungeon->trap.direction == 'd') {
-                // we need to go down
-                max_pick = middle_pick;
+                high = mid - LOCK_THRESHOLD;
             } else if (dungeon->trap.direction == '-') {
-                // pick guessed correctly
-                printf("rogue has successfully picked the lock!\n");
-                break;
+                printf("Lock picked successfully\n");
+                break; // Exit the loop if lock is picked
             }
         }
 
-        // failed statement
-        if (elapsed_time >= total_time) {
-            printf("Failed to pick the lock within the allowed time.\n");
+        if (!dungeon->trap.locked) {
+            printf("Rogue has successfully unlocked the trap.\n");
+        } else {
+            printf("Rogue pick failed\n");
         }
-
-        // ensure resource or critical condition is available
-        // sem_wait(semaphore_one);
-        // sem_wait(semaphore_two);
-
-        sleep(TIME_TREASURE_AVAILABLE);
-
-        // release resource 
-        // sem_post(semaphore_one);
-        // sem_post(semaphore_two);
+        sem_post(lever); // Release the semaphore after operation
     }
-    
-    sem_post(my_semaphore);
+}
 
+// Signal handler function to direct to appropriate functions based on the signal type
+void rogue_signal_handler(int sig, siginfo_t *info, void *ucontext) {
+    if (sig == DUNGEON_SIGNAL) {
+        rogue_pick_lock(sig, dungeon); // Handle lock picking
+    } else if (sig == SEMAPHORE_SIGNAL) {
+        collect_treasure(sig); // Handle treasure collection
+    }
 }
 
 int main() {
-    // create/open a shared memory object
-    // name of shared obj: dungeon_shm_name
-    // O_RDWR: flag that allows  the shared memory object to be opened for both reading and writing
-    // 0666: allow read and write access for the user, group, and others
+    // Open the shared memory segment
     int shm_fd = shm_open(dungeon_shm_name, O_RDWR, 0666);
-
-    // check if failure to open
     if (shm_fd == -1) {
-        perror("shm_open");
+        perror("Failed to open shared memory");
         exit(EXIT_FAILURE);
     }
 
-    // setting the size of the shared memory segment
-    if (ftruncate(shm_fd, sizeof(struct Dungeon)) == -1) {
-        perror("ftruncate");
-        exit(EXIT_FAILURE);
-    }
-
-    // mapped memory is readable, writeable
+    // Map the shared memory to the Dungeon structure
     dungeon = mmap(NULL, sizeof(struct Dungeon), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-
     if (dungeon == MAP_FAILED) {
-        perror("mmap");
+        perror("Failed to mmap shared memory");
         close(shm_fd);
         exit(EXIT_FAILURE);
     }
-    // opening semaphore
-    my_semaphore = sem_open("/Lever_one", 0);
 
-    if (my_semaphore == SEM_FAILED) {
-        perror("Failed to open semaphore /Lever_one");
+    // Open or create the semaphore for the lever (assuming Rogue uses LeverOne)
+    lever = sem_open(dungeon_lever_one, O_CREAT, 0666, 0); 
+    if (lever == SEM_FAILED) {
+        perror("Failed to open semaphore for lever one in rogue");
         exit(EXIT_FAILURE);
     }
 
-    // signal handler
-    signal_setup();
+    // Setup signal handling
+    struct sigaction sa;
+    sa.sa_sigaction = rogue_signal_handler; // Specify the signal handling function
+    sigemptyset(&sa.sa_mask); // Initialize the signal set to be empty, so no signals are blocked
+    sa.sa_flags = SA_SIGINFO; // Use the sa_sigaction field
+    sigaction(DUNGEON_SIGNAL, &sa, NULL);
+    sigaction(SEMAPHORE_SIGNAL, &sa, NULL);
 
-    // waiting until signal 
+    // Main loop to wait for signals
     while (dungeon->running) {
-        pause(); 
+        pause(); // Pause and wait for signals indefinitely
     }
 
-    // clean up shared memory 
-    // sem_close(semaphore_one);
-    // sem_close(semaphore_two);
-    munmap(dungeon, sizeof(struct Dungeon));
-    close(shm_fd);
-    sem_close(my_semaphore);
-    return 0;
+    // Clean up resources after the main loop exits
+    munmap(dungeon, sizeof(struct Dungeon)); // Unmap the shared memory
+    close(shm_fd); // Close the shared memory file descriptor
+    sem_close(lever); // Close the semaphore
+
+    return EXIT_SUCCESS;
 }

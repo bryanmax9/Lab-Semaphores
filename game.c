@@ -1,3 +1,4 @@
+// Include the headers containing definitions for the Dungeon structure, and other dependencies
 #include "dungeon_info.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,134 +7,113 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <semaphore.h>
+#include <errno.h>
+#include <signal.h>
 
-volatile sig_atomic_t signal_flag = 0;
-
+// Declare the external function RunDungeon to be used later to run the dungeon along with the characters
 extern void RunDungeon(pid_t wizard, pid_t rogue, pid_t barbarian);
-pid_t fork_and_exec(const char *path);
-
-void game_signal_handler(int sig) {
-     if (sig == DUNGEON_SIGNAL) {
-        signal_flag = 1;
-     } else if (sig == SEMAPHORE_SIGNAL) {
-        signal_flag = 2;
-     }
-}
-
-void setup_game_signal_handling() {
-    struct sigaction sa;
-    sa.sa_handler = game_signal_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-
-    if (sigaction(DUNGEON_SIGNAL, &sa, NULL) == -1) {
-        perror("sigaction failed");
-        exit(EXIT_FAILURE);
-    }
-
-     if (sigaction(SEMAPHORE_SIGNAL, &sa, NULL) == -1) {
-        perror("SEMAPHORE_SIGNAL failed");
-        exit(EXIT_FAILURE);
-    }
-}
-
 
 int main() {
-    setup_game_signal_handling();
+    // Unlink any previous semaphore handles to start fresh
+    sem_unlink(dungeon_lever_one);
+    sem_unlink(dungeon_lever_two);
 
-    int shm_fd = shm_open(dungeon_shm_name, O_CREAT | O_RDWR, 0666);
+    // Open a shared memory segment
+    int shm_fd = shm_open(dungeon_shm_name, O_CREAT | O_RDWR, 0660);
     if (shm_fd == -1) {
-        perror("shm_open");
+        perror("shm_open failed");
         exit(EXIT_FAILURE);
     }
 
+    // Set the size of the shared memory segment to the size of Dungeon struct
     if (ftruncate(shm_fd, sizeof(struct Dungeon)) == -1) {
-        perror("ftruncate");
+        perror("ftruncate failed");
         close(shm_fd);
         exit(EXIT_FAILURE);
     }
 
-    struct Dungeon *dungeon = mmap(0, sizeof(struct Dungeon), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    // Map the shared memory segment for read and write access
+    struct Dungeon *dungeon = mmap(NULL, sizeof(struct Dungeon), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (dungeon == MAP_FAILED) {
-        perror("mmap");
+        perror("mmap failed");
         close(shm_fd);
         exit(EXIT_FAILURE);
     }
-
+    // Initialize the dungeon's running state to true
     dungeon->running = true;
 
-    sem_t *sem1 = sem_open("/Lever_one", O_CREAT, 0666, 1);
-    if (sem1 == SEM_FAILED) {
-        perror("sem_open /Lever_one");
+    // Create and open semaphores for controlling access to the treasure room
+    sem_t *one = sem_open(dungeon_lever_one, O_CREAT, 0660, 1);
+    if (one == SEM_FAILED) {
+        perror("sem_open for leverOne failed");
         exit(EXIT_FAILURE);
     }
 
-    sem_t *sem2 = sem_open("/Lever_two", O_CREAT, 0666, 1);
-    if (sem2 == SEM_FAILED) {
-        perror("sem_open /Lever_two");
+    sem_t *two = sem_open(dungeon_lever_two, O_CREAT, 0660, 1);
+    if (two == SEM_FAILED) {
+        perror("sem_open for leverTwo failed");
         exit(EXIT_FAILURE);
     }
 
-    // Initialize characters
-    pid_t barbarian_pid = fork_and_exec("./barbarian");
-    pid_t wizard_pid = fork_and_exec("./wizard");
-    pid_t rogue_pid = fork_and_exec("./rogue");
+    // Fork to create a new process for the barbarian character
+    pid_t barbarian_pid = fork();
+    if (barbarian_pid == -1) {
+        perror("Failed to fork barbarian");
+        exit(EXIT_FAILURE);
+    } else if (barbarian_pid == 0) {
+        // If fork returns 0, we are in the child process, execute barbarian program
+        execlp("./barbarian", "barbarian", NULL);
+    }
 
+    // Fork to create a new process for the wizard character
+    pid_t wizard_pid = fork();
+    if (wizard_pid == -1) {
+        perror("Failed to fork wizard");
+        exit(EXIT_FAILURE);
+    } else if (wizard_pid == 0) {
+        // If fork returns 0, we are in the child process, execute wizard program
+        execlp("./wizard", "wizard", NULL);
+    }
+
+    // Fork to create a new process for the rogue character
+    pid_t rogue_pid = fork();
+    if (rogue_pid == -1) {
+        perror("Failed to fork rogue");
+        exit(EXIT_FAILURE);
+    } else if (rogue_pid == 0) {
+        // If fork returns 0, we are in the child process, execute rogue program
+        execlp("./rogue", "rogue", NULL);
+    }
+
+    // Sleep to ensure all processes are started before running the dungeon
+    sleep(1);
+    // Start the dungeon game logic with all three characters
     RunDungeon(wizard_pid, rogue_pid, barbarian_pid);
 
-    while (dungeon->running) {
-        pause();
+    // Terminate child processes to clean up
+    kill(barbarian_pid, SIGTERM);
+    kill(wizard_pid, SIGTERM);
+    kill(rogue_pid, SIGTERM);
 
-        if (signal_flag == 1) {
-            if (kill(barbarian_pid, SIGUSR1) == -1) {
-                perror("Failed to signal barbarian");
-            }
-            signal_flag = 0;
+    // Wait for all child processes to finish to ensure proper cleanup
+    int status;
+    waitpid(wizard_pid, &status, 0);
+    waitpid(rogue_pid, &status, 0);
+    waitpid(barbarian_pid, &status, 0);
 
-            sleep(1);
+    // Close and unlink the semaphores
+    sem_close(one);
+    sem_close(two);
+    sem_unlink(dungeon_lever_one);
+    sem_unlink(dungeon_lever_two);
 
-            if (kill(wizard_pid, DUNGEON_SIGNAL) == -1) {
-                perror("Failed to signal wizard");
-            }
-            signal_flag = 0;
-
-            sleep(1);
-
-            if (kill(rogue_pid, DUNGEON_SIGNAL) == -1) {
-                perror("Failed to signal rogue");
-            }
-            signal_flag = 0;
-
-
-        }
-
-    }
-    // wait for all children
-    int process_status;
-    while (wait(&process_status) > 0);
-
-    // cleanup
-    sem_close(sem1);
-    sem_close(sem2);
-    sem_unlink("/Lever_one");
-    sem_unlink("/Lever_two");
-
+    // Unmap and close the shared memory
     munmap(dungeon, sizeof(struct Dungeon));
     close(shm_fd);
     shm_unlink(dungeon_shm_name);
 
+    // Indicate successful closure of the game
+    printf("Success in closing the GAME! \n");
+    
     return 0;
-}
-
-pid_t fork_and_exec(const char *path) {
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    } else if (pid == 0) {
-        execlp(path, path, NULL);
-        perror("execlp");
-        exit(EXIT_FAILURE);
-    }
-    return pid;
 }
