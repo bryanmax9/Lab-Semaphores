@@ -9,6 +9,10 @@
 ./game
 ```
 
+## DEMO
+
+![lab2OperatingSystems](https://github.com/bryanmax9/Lab-Semaphores/assets/69496341/8a91a7ac-a22e-44e3-b394-0d87f8c93d98)
+
 ## Assignment Description
 
 The goal of this assignment is to become familiar with concurrent processing in Unix/Linux using [shared memory](https://man7.org/linux/man-pages/man7/shm_overview.7.html) and become familiar with both man pages and signal processing.
